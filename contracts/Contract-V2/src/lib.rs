@@ -11,9 +11,9 @@ mod v1_interface;
 
 use errors::ContractError;
 pub use types::{
-    BatchStreamsCreatedEvent, ContractPausedEvent, ContractUnpausedEvent, MigrationEvent, PermitArgs, PermitStreamCreatedEvent, StreamArgs,
-    StreamCancelledV2Event, StreamClaimV2Event, StreamCreatedV2Event, StreamMigratedEvent,
-    StreamV2,
+    AdminTransferredEvent, BatchStreamsCreatedEvent, ContractPausedEvent, ContractUnpausedEvent,
+    PermitArgs, PermitStreamCreatedEvent, StreamArgs, StreamCancelledV2Event, StreamClaimV2Event,
+    StreamCreatedV2Event, StreamMigratedEvent, StreamToppedUpEvent, StreamV2,
 };
 use v1_interface::Client as V1Client;
 
@@ -183,6 +183,7 @@ impl Contract {
             v1_stream_id,
             step_duration: 0,
             multiplier_bps: 0,
+            penalty_bps: 0,
         };
 
         storage::set_stream(&env, v2_stream_id, &v2_stream);
@@ -201,7 +202,7 @@ impl Contract {
 
         // Emit migration event for indexer
         env.events().publish(
-            Symbol::new(&env, "migrate"),
+            (symbol_short!("migrate"), caller.clone()),
             (v1_stream_id, v2_stream_id, caller.clone(), remaining),
         );
 
@@ -289,8 +290,18 @@ impl Contract {
 
         let now = env.ledger().timestamp();
         let unlocked = Self::calculate_unlocked_internal(&stream, now);
-        let to_receiver = unlocked.saturating_sub(stream.withdrawn_amount);
-        let to_sender = stream.total_amount.saturating_sub(unlocked);
+        let earned = unlocked.saturating_sub(stream.withdrawn_amount);
+        let sender_remaining = stream.total_amount.saturating_sub(unlocked);
+
+        // Apply breakup penalty if the sender is cancelling and penalty_bps > 0.
+        let penalty = if caller == stream.sender && stream.penalty_bps > 0 {
+            (sender_remaining * stream.penalty_bps as i128) / 10_000
+        } else {
+            0
+        };
+
+        let to_receiver = earned + penalty;
+        let to_sender = sender_remaining.saturating_sub(penalty);
 
         stream.withdrawn_amount = unlocked;
         stream.cancelled = true;
@@ -314,6 +325,7 @@ impl Contract {
                 stream_id,
                 canceller: caller,
                 to_receiver,
+                penalty,
                 to_sender,
                 timestamp: now,
             },
@@ -502,6 +514,10 @@ impl Contract {
             return Err(ContractError::InvalidTimeRange);
         }
 
+        if args.penalty_bps > 10_000 {
+            return Err(ContractError::InvalidPenalty);
+        }
+
         if args.total_amount < storage::get_min_value(&env, &args.token) {
             return Err(ContractError::BelowDustThreshold);
         }
@@ -529,6 +545,7 @@ impl Contract {
             v1_stream_id: 0,
             step_duration: args.step_duration,
             multiplier_bps: args.multiplier_bps,
+            penalty_bps: args.penalty_bps,
         };
 
         storage::set_stream(&env, stream_id, &stream);
@@ -628,6 +645,7 @@ impl Contract {
             v1_stream_id: 0,
             step_duration: args.step_duration,
             multiplier_bps: args.multiplier_bps,
+            penalty_bps: 0, // permit streams default to no penalty
         };
 
         storage::set_stream(&env, stream_id, &stream);
@@ -725,6 +743,7 @@ impl Contract {
                 v1_stream_id: 0,
                 step_duration: args.step_duration,
                 multiplier_bps: args.multiplier_bps,
+                penalty_bps: args.penalty_bps,
             };
 
             storage::set_stream(&env, stream_id, &stream);
@@ -752,7 +771,7 @@ impl Contract {
 
         // Emit batch creation summary event
         env.events().publish(
-            (symbol_short!("batch_create"), sender.clone()),
+            (symbol_short!("batch_cr"), sender.clone()),
             BatchStreamsCreatedEvent {
                 stream_ids: stream_ids.clone(),
                 sender: sender.clone(),

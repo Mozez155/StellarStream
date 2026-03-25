@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, BytesN};
+use soroban_sdk::{contracttype, Address, BytesN, Vec};
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -16,6 +16,10 @@ pub struct StreamV2 {
     pub v1_stream_id: u64,
     pub step_duration: i128,
     pub multiplier_bps: i128,
+    /// Penalty in basis points (0–10000) charged to the sender on early
+    /// cancellation. The penalty is taken from the sender's remaining
+    /// (unearned) balance and awarded to the receiver as a "breakup fee".
+    pub penalty_bps: u32,
 }
 
 #[contracttype]
@@ -30,6 +34,7 @@ pub struct StreamArgs {
     pub end_time: u64,
     pub step_duration: i128,
     pub multiplier_bps: i128,
+    pub penalty_bps: u32,
 }
 
 #[contracttype]
@@ -64,13 +69,11 @@ pub struct StreamMigratedEvent {
 
 #[contracttype]
 #[derive(Clone, Debug)]
-pub enum MigrationEvent {
-    Migrated {
-        v1_id: u64,
-        v2_id: u64,
-        sender: Address,
-        remaining_balance: i128,
-    },
+pub struct MigrationEvent {
+    pub v1_id: u64,
+    pub v2_id: u64,
+    pub sender: Address,
+    pub remaining_balance: i128,
 }
 
 #[contracttype]
@@ -167,6 +170,7 @@ pub struct StreamCancelledV2Event {
     pub stream_id: u64,
     pub canceller: Address,
     pub to_receiver: i128,
+    pub penalty: i128,
     pub to_sender: i128,
     pub timestamp: u64,
 }
