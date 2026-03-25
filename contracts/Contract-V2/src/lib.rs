@@ -296,6 +296,9 @@ impl Contract {
         if now < stream.cliff_time || now <= stream.start_time {
             return 0;
         }
+        if now < stream.cliff_time || now <= stream.start_time {
+            return 0;
+        }
         if now >= stream.end_time {
             return stream.total_amount;
         }
