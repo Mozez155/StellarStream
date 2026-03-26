@@ -59,4 +59,6 @@ pub enum Error {
     InvalidDuration = 40,
     /// Contract is in emergency (withdraw-only) mode; new capital cannot enter
     EmergencyMode = 41,
+    /// V1 stream has already been migrated; replay attack prevented
+    AlreadyMigrated = 42,
 }

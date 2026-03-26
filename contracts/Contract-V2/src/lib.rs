@@ -451,6 +451,11 @@ impl Contract {
         }
         caller.require_auth();
 
+        // Issue #399 — replay-attack prevention
+        if storage::is_v1_migrated(&env, v1_stream_id) {
+            return Err(Error::AlreadyMigrated);
+        }
+
         let v1_client = V1Client::new(&env, &v1_contract);
 
         let v1_stream = v1_client
@@ -523,6 +528,8 @@ impl Contract {
 
         storage::set_stream(&env, v2_stream_id, &v2_stream);
         storage::update_stats(&env, remaining, &v1_stream.sender, &caller);
+        // Issue #399 — record migration so the same V1 stream cannot be migrated again
+        storage::mark_v1_migrated(&env, v1_stream_id);
 
         let mut data = Vec::new(&env);
         data.push_back(v2_stream_id.into_val(&env));
@@ -565,6 +572,11 @@ impl Contract {
         // Note: For hackathon/simplicity, we assume the Symbol matches the numeric ID.
         // In production, this would use a more robust parsing utility.
         let v1_stream_id = Self::parse_symbol_to_u64(&v1_id);
+
+        // Issue #399 — replay-attack prevention
+        if storage::is_v1_migrated(&env, v1_stream_id) {
+            return Err(Error::AlreadyMigrated);
+        }
 
         let v1_client = V1Client::new(&env, &v1_contract);
 
@@ -623,6 +635,8 @@ impl Contract {
 
         storage::set_stream(&env, v2_stream_id, &v2_stream);
         storage::update_stats(&env, remaining_balance, &v1_stream.sender, &caller);
+        // Issue #399 — record migration so the same V1 stream cannot be migrated again
+        storage::mark_v1_migrated(&env, v1_stream_id);
 
         // Emit standardized Nebula migration event
         let mut data = Vec::new(&env);

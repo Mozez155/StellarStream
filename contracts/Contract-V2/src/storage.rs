@@ -93,6 +93,11 @@ pub enum DataKeyV2 {
     // -- Emergency Mode (Issue #393) ---------------------------------
     /// When true, create_stream and top_up are blocked; withdraw remains accessible.
     Emergency, // 15
+
+    // -- Migration Ledger Bit-Map (Issue #399) -----------------------
+    /// Persistent flag per V1 stream ID. Set to true after a successful migration
+    /// to prevent replay attacks (migrating the same V1 stream twice).
+    V1MigratedMap(u64), // 16
 }
 
 /// Global stream counter.
@@ -441,6 +446,28 @@ pub fn set_emergency(env: &Env, active: bool) {
         .instance()
         .set(&DataKeyV2::Emergency, &active);
     bump_instance(env);
+}
+
+// ----------------------------------------------------------------
+// persistent() helpers — Migration Ledger Bit-Map (Issue #399)
+// ----------------------------------------------------------------
+
+/// Returns true if `v1_stream_id` has already been migrated to V2.
+pub fn is_v1_migrated(env: &Env, v1_stream_id: u64) -> bool {
+    env.storage()
+        .persistent()
+        .get(&DataKeyV2::V1MigratedMap(v1_stream_id))
+        .unwrap_or(false)
+}
+
+/// Mark `v1_stream_id` as migrated. Uses the same TTL as streams so the
+/// record outlives the migration window by at least 120 days.
+pub fn mark_v1_migrated(env: &Env, v1_stream_id: u64) {
+    let key = DataKeyV2::V1MigratedMap(v1_stream_id);
+    env.storage().persistent().set(&key, &true);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, STREAM_TTL_THRESHOLD, STREAM_TTL_BUMP);
 }
 
 // ----------------------------------------------------------------
