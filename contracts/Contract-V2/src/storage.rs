@@ -110,6 +110,14 @@ pub enum DataKeyV2 {
     PendingTreasurySplit(u64), // 19
     /// Counter for pending treasury split IDs
     TreasurySplitCount, // 20
+
+    // -- Issue #602 — Protocol Fee Capture for split_multi_asset -----
+    /// Address that collects disbursement fees
+    FeeCollector, // 21
+    /// Token used to pay disbursement fees (e.g. native XLM SAC)
+    FeeToken, // 22
+    /// Fee charged per recipient in split_multi_asset, in the FeeToken's base unit
+    FeePerRecipient, // 23
 }
 
 /// Global stream counter.
@@ -747,4 +755,39 @@ pub fn clear_pending_treasury_split(env: &Env, split_id: u64) {
         .instance()
         .remove(&DataKeyV2::PendingTreasurySplit(split_id));
     bump_instance(env);
+}
+
+// ----------------------------------------------------------------
+// Issue #602 — Protocol Fee Capture for split_multi_asset
+// ----------------------------------------------------------------
+
+pub fn set_fee_collector(env: &Env, collector: &Address) {
+    env.storage().instance().set(&DataKeyV2::FeeCollector, collector);
+    bump_instance(env);
+}
+
+pub fn get_fee_collector(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&DataKeyV2::FeeCollector)
+}
+
+pub fn set_fee_token(env: &Env, token: &Address) {
+    env.storage().instance().set(&DataKeyV2::FeeToken, token);
+    bump_instance(env);
+}
+
+pub fn get_fee_token(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&DataKeyV2::FeeToken)
+}
+
+/// Fee charged per recipient (in fee_token base units). Default 0 = no fee.
+pub fn set_fee_per_recipient(env: &Env, amount: i128) {
+    env.storage().instance().set(&DataKeyV2::FeePerRecipient, &amount);
+    bump_instance(env);
+}
+
+pub fn get_fee_per_recipient(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKeyV2::FeePerRecipient)
+        .unwrap_or(0)
 }

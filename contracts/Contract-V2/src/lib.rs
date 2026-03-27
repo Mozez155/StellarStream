@@ -2617,6 +2617,11 @@ impl Contract {
     /// Each `MultiAssetRecipient` row may specify a different asset, so USDC can
     /// go to some recipients while XLM (or any SAC-compliant token) goes to others.
     ///
+    /// If a `fee_collector`, `fee_token`, and `fee_per_recipient` are configured
+    /// by the admin, a flat fee of `fee_per_recipient * recipients.len()` is
+    /// transferred from `from` to the `fee_collector` in the `fee_token` before
+    /// the disbursements are executed (Issue #602).
+    ///
     /// Panics (via `require_auth`) if the caller has not authorised the transaction.
     pub fn split_multi_asset(
         env: Env,
@@ -2631,6 +2636,18 @@ impl Contract {
 
         from.require_auth();
 
+        // Issue #602 — collect protocol fee before disbursements
+        let fee_per_recipient = storage::get_fee_per_recipient(&env);
+        if fee_per_recipient > 0 {
+            let fee_collector = storage::get_fee_collector(&env).ok_or(Error::NoTreasury)?;
+            let fee_token_addr = storage::get_fee_token(&env).ok_or(Error::NoTreasury)?;
+            let total_fee = fee_per_recipient
+                .checked_mul(recipients.len() as i128)
+                .ok_or(Error::Overflow)?;
+            soroban_sdk::token::TokenClient::new(&env, &fee_token_addr)
+                .transfer(&from, &fee_collector, &total_fee);
+        }
+
         for entry in recipients.iter() {
             if entry.amount <= 0 {
                 return Err(Error::BelowDustThreshold);
@@ -2640,6 +2657,45 @@ impl Contract {
         }
 
         Ok(())
+    }
+
+    // ----------------------------------------------------------------
+    // Issue #602 — Protocol Fee Capture: admin helpers
+    // ----------------------------------------------------------------
+
+    /// Set the address that collects disbursement fees. Admin-only.
+    pub fn set_fee_collector(env: Env, collector: Address) -> Result<(), Error> {
+        storage::try_get_admin(&env)?.require_auth();
+        storage::set_fee_collector(&env, &collector);
+        Ok(())
+    }
+
+    /// Get the current fee collector address.
+    pub fn get_fee_collector(env: Env) -> Option<Address> {
+        storage::get_fee_collector(&env)
+    }
+
+    /// Set the token used to pay disbursement fees. Admin-only.
+    pub fn set_fee_token(env: Env, token: Address) -> Result<(), Error> {
+        storage::try_get_admin(&env)?.require_auth();
+        storage::set_fee_token(&env, &token);
+        Ok(())
+    }
+
+    /// Set the per-recipient fee amount (in fee_token base units). Admin-only.
+    /// Pass 0 to disable fee collection.
+    pub fn set_fee_per_recipient(env: Env, amount: i128) -> Result<(), Error> {
+        storage::try_get_admin(&env)?.require_auth();
+        if amount < 0 {
+            return Err(Error::BelowDustThreshold);
+        }
+        storage::set_fee_per_recipient(&env, amount);
+        Ok(())
+    }
+
+    /// Get the current per-recipient fee amount.
+    pub fn get_fee_per_recipient(env: Env) -> i128 {
+        storage::get_fee_per_recipient(&env)
     }
 }
 
