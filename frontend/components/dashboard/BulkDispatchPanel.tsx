@@ -2,7 +2,16 @@
 
 // components/dashboard/BulkDispatchPanel.tsx
 // Issue #695 — Bulk-Retry for Failed Batch Transactions
+// Issue #689 — Multi-Asset Value-Aggregator in USD
 
+import { useMemo } from "react";
+import type { BatchState } from "@/lib/bulk-splitter/use-bulk-splitter";
+import type { Recipient } from "@/lib/bulk-splitter/types";
+import {
+  usePriceFetcher,
+  calculateTotalUsdValue,
+  formatUsdValue,
+} from "@/lib/hooks";
 import { useState } from "react";
 import type { BatchState } from "@/lib/bulk-splitter/use-bulk-splitter";
 import type { Recipient } from "@/lib/bulk-splitter/types";
@@ -154,6 +163,8 @@ interface BulkDispatchPanelProps {
   onRetryFailed: (submitBatch: (recipients: Recipient[]) => Promise<string>) => Promise<void>;
   /** Provide the real Soroban submit function here. */
   submitBatch: (recipients: Recipient[]) => Promise<string>;
+  /** Optional default token address for all recipients (for Issue #689) */
+  defaultTokenAddress?: string;
 }
 
 export function BulkDispatchPanel({
@@ -161,7 +172,27 @@ export function BulkDispatchPanel({
   onDispatch,
   onRetryFailed,
   submitBatch,
+  defaultTokenAddress,
 }: BulkDispatchPanelProps) {
+  // Issue #689 - Fetch prices and calculate total USD value
+  const { prices, isLoading: pricesLoading } = usePriceFetcher();
+
+  // Calculate total USD value across all batches
+  const totalUsdValue = useMemo(() => {
+    if (!prices.length || !batchStates.length) return 0;
+
+    // Collect all recipients from all batches
+    const allRecipients = batchStates.flatMap((batch) => batch.recipients);
+
+    // Map to format expected by calculateTotalUsdValue
+    const recipientsWithTokens = allRecipients.map((r) => ({
+      tokenAddress: r.tokenAddress || defaultTokenAddress || "native",
+      amount: r.amount.toString(),
+    }));
+
+    return calculateTotalUsdValue(recipientsWithTokens, prices);
+  }, [batchStates, prices, defaultTokenAddress]);
+
   const total = batchStates.length;
   const succeeded = batchStates.filter((b) => b.status === "success").length;
   const failed = batchStates.filter((b) => b.status === "error").length;
@@ -177,8 +208,19 @@ export function BulkDispatchPanel({
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06]">
         <div>
-          <p className="font-body text-[10px] tracking-[0.12em] text-white/40 uppercase">
-            Batch Dispatch
+          {/* Issue #689 - Total Disbursement Value Header */}
+          {totalUsdValue > 0 && (
+            <div className="flex items-center gap-3 mb-1">
+              <p className="font-body text-[10px] tracking-[0.12em] text-white/40 uppercase">
+                Total Disbursement Value
+              </p>
+              {pricesLoading && (
+                <span className="text-[10px] text-amber-400/60 animate-pulse">Loading prices...</span>
+              )}
+            </div>
+          )}
+          <p className="font-body text-lg font-bold text-emerald-400">
+            {formatUsdValue(totalUsdValue)}
           </p>
           <p className="font-body text-xs text-white/50 mt-0.5">
             {succeeded}/{total} batches complete
