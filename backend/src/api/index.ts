@@ -17,6 +17,7 @@ import webhooksRouter from "./webhooks.routes.js";
 import cachedStatsRouter from "./cached-stats.routes.js";
 
 import orgMemberRouter from "./org-member.routes.js";
+import assetMappingRouter from "./asset-mapping.routes.js";
 
 const router = Router();
 
@@ -33,6 +34,7 @@ router.use("/invoice-links", invoiceLinkRouter);
 router.use("/webhooks", webhooksRouter);
 router.use("/stats", cachedStatsRouter);
 router.use("/", orgMemberRouter);
+router.use("/asset-mapping", assetMappingRouter);
 
 const auditLogService = new AuditLogService();
 

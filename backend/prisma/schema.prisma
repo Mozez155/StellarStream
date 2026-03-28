@@ -405,3 +405,21 @@ model AssetConfig {
   @@index([isVerified])
   @@index([isVisible])
 }
+
+// Unified registry mapping Stellar Asset IDs to their source-chain equivalents
+model AssetMapping {
+  id              String   @id @default(cuid())
+  stellarAssetId  String   @unique // "SYMBOL:ISSUER" or contract address
+  symbol          String
+  sourceChain     String   // "stellar" | "ethereum" | "polygon" | etc.
+  sourceContract  String?  // Origin-chain contract address (null for native Stellar)
+  label           String   // Human-readable e.g. "USDC (Circle/Stellar)"
+  bridgeProtocol  String?  // "wormhole" | "squid" | null for native
+  decimals        Int      @default(7)
+  isNative        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([symbol])
+  @@index([sourceChain])
+}
