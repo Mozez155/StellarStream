@@ -34,4 +34,6 @@ pub enum Error {
     /// Returned by the pre-flight check when the sender's balance is insufficient
     /// to cover the total split amount.
     InsufficientBalance = 26,
+    // #922: circuit breaker
+    ContractPaused = 25,
 }

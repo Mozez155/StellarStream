@@ -18,4 +18,12 @@ pub enum DataKey {
     CouncilKeys,
     /// Stores a processed split hash to prevent double-spend on retries.
     ProcessedHash(BytesN<32>),
+    // #919: affiliate revenue split
+    AffiliateAddress,
+    AffiliateBps,
+    PendingWithdrawal(Address),
+    // #920: chunked processing state
+    SplitFundsNextIndex,
+    // #922: circuit breaker
+    ContractState,
 }
